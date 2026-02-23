@@ -2,11 +2,14 @@ import turtle
 import random
 import math
 
-t = turtle.Turtle()
+screen = turtle.Screen()
+screen.bgcolor("black")
+screen.tracer(0)
 
-t.screen.bgcolor("black")
+t = turtle.Turtle()
+t.hideturtle()
 t.color("white")
-t.speed(100)
+t.speed(0)
 
 class Proton:
     def __init__(self):
@@ -50,15 +53,47 @@ class Electron:
         self.radius = 5
     
     def draw(self, distance, angle, cx=0, cy=0):
+        # static draw (kept for backwards compatibility)
+        x = cx + distance * math.cos(math.radians(angle))
+        y = cy + distance * math.sin(math.radians(angle))
         t.penup()
-        t.goto(cx, cy)
-        t.setheading(angle)
-        t.forward(distance)
+        t.goto(x, y - self.radius)
         t.pendown()
         t.color(self.color)
+        t.setheading(0)
         t.begin_fill()
         t.circle(self.radius)
         t.end_fill()
+
+    # Animation helper creates an independent turtle for animation
+    def create_anim_turtle(self):
+        et = turtle.Turtle()
+        et.hideturtle()
+        et.penup()
+        et.speed(0)
+        return et
+
+    # Start orbit animation for this electron
+    def start_orbit(self, cx, cy, r, angle, speed, color=None):
+        self.orbit_cx = cx
+        self.orbit_cy = cy
+        self.r = r
+        self.angle = angle
+        self.speed = speed
+        self.anim_color = color or self.color
+        self.anim_turtle = self.create_anim_turtle()
+
+    # Update position for animation frame
+    def update(self):
+        # advance angle
+        self.angle = (self.angle + self.speed) % 360
+        rad = math.radians(self.angle)
+        x = self.orbit_cx + self.r * math.cos(rad)
+        y = self.orbit_cy + self.r * math.sin(rad)
+        # draw dot at new position
+        self.anim_turtle.clear()
+        self.anim_turtle.goto(x, y)
+        self.anim_turtle.dot(self.radius * 2, self.anim_color)
 
 class Nucleus:
     def __init__(self, protons, neutrons):
@@ -146,9 +181,9 @@ class Atom:
         t.penup()
         t.goto(cx, cy - radius)
         t.pendown()
-        t.setheading(0)
         t.color(self.color)
         t.circle(radius)
+        t.setheading(0)
         
 # Example usage
 if __name__ == "__main__":
@@ -168,7 +203,7 @@ if __name__ == "__main__":
     hydrogen.draw_nucleus(hx, hy)
     hydrogen.draw_orbit(100, hx, hy)
     electron = Electron()
-    electron.draw(100, 45, hx, hy)
+    # animated electrons will be created later
     t.penup()
     t.goto(hx, hy - 120)
     t.color("white")
@@ -178,7 +213,6 @@ if __name__ == "__main__":
     deuterium = Atom("Deuterium", 1, 1, "white")
     deuterium.draw_nucleus(cx, cy)
     deuterium.draw_orbit(100, cx, cy)
-    electron.draw(100, 0, cx, cy)
     t.penup()
     t.goto(cx, cy - 120)
     t.color("white")
@@ -190,7 +224,6 @@ if __name__ == "__main__":
     tritium = Atom("Tritium", 1, 2, "lightgreen")
     tritium.draw_nucleus(tx, ty)
     tritium.draw_orbit(100, tx, ty)
-    electron.draw(100, -45, tx, ty)
     t.penup()
     t.goto(tx, ty - 120)
     t.color("white")
@@ -200,13 +233,43 @@ if __name__ == "__main__":
     hx2, hy2 = cx + 250, cy
     helium = Atom("Helium", 2, 2, "yellow")
     helium.draw_nucleus(hx2, hy2)
-    helium.draw_orbit(100, hx2, hy2)    
-    electron.draw(100, 90, hx2, hy2)
-    electron.draw(100, 270, hx2, hy2)
+    helium.draw_orbit(100, hx2, hy2)
     t.penup()
     t.goto(hx2, hy2 - 120)
     t.color("white")
     t.write("Helium", align="center", font=("Arial", 12, "normal"))
     
-    t.goto(1000,1000)  # Move turtle out of the way
-    turtle.done()
+    # --- Animated electrons setup using Electron class methods ---
+    animated = []
+
+    # Hydrogen electron
+    e_h = Electron()
+    e_h.start_orbit(hx, hy, 100, 45, 2.2, color='blue')
+    animated.append(e_h)
+
+    # Deuterium electron
+    e_d = Electron()
+    e_d.start_orbit(cx, cy, 100, 0, 2.0, color='blue')
+    animated.append(e_d)
+
+    # Tritium electron
+    e_t = Electron()
+    e_t.start_orbit(tx, ty, 100, -45, 1.8, color='blue')
+    animated.append(e_t)
+
+    # Helium electrons (two, opposite)
+    e_he1 = Electron()
+    e_he1.start_orbit(hx2, hy2, 100, 90, 2.5, color='blue')
+    animated.append(e_he1)
+    e_he2 = Electron()
+    e_he2.start_orbit(hx2, hy2, 100, 270, 2.5, color='blue')
+    animated.append(e_he2)
+
+    def animate():
+        for e in animated:
+            e.update()
+        screen.update()
+        screen.ontimer(animate, 30)
+
+    animate()
+    screen.mainloop()
