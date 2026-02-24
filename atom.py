@@ -99,12 +99,14 @@ class Electron:
         self.anim_turtle.dot(self.radius * 2, self.anim_color)
 
 class Nucleus:
-    def __init__(self, protons, neutrons):
+    def __init__(self, protons, neutrons, scale=1.0):
         self.protons = protons
         self.neutrons = neutrons
         # Use nucleon size from class defaults
         self.nucleon_radius = Proton().radius
         self.color = "purple"
+        # allow compact / expanded nucleus by scale factor
+        self.scale = float(scale)
     
     def draw(self, cx=0, cy=0, drawer=None):
         drawer = drawer or t
@@ -113,8 +115,8 @@ class Nucleus:
         # Estimate nucleus radius based on number of nucleons
         # Scale: sqrt(N) * nucleon_radius * factor
         # Better estimate: area-based packing → radius proportional to sqrt(N)
-        factor = 2.2
-        nucleus_radius = max(self.nucleon_radius * 3.0, math.sqrt(max(1, total)) * self.nucleon_radius * factor)
+        factor = 2.2 * self.scale
+        nucleus_radius = max(self.nucleon_radius * 3.0 * self.scale, math.sqrt(max(1, total)) * self.nucleon_radius * factor)
 
         # Draw nucleus background (centered at cx,cy)
         drawer.penup()
@@ -175,17 +177,17 @@ class Nucleus:
     def radius(self):
         # same formula as in draw to compute nucleus radius
         total = self.protons + self.neutrons
-        factor = 2.2
-        return max(self.nucleon_radius * 3.0, math.sqrt(max(1, total)) * self.nucleon_radius * factor)
+        factor = 2.2 * self.scale
+        return max(self.nucleon_radius * 3.0 * self.scale, math.sqrt(max(1, total)) * self.nucleon_radius * factor)
 
     def mass(self):
         # approximate mass proportional to nucleon count
         return max(1.0, float(self.protons + self.neutrons))
 
 class Atom:
-    def __init__(self, name, protons, neutrons, color, cx=0, cy=0):
+    def __init__(self, name, protons, neutrons, color, cx=0, cy=0, nucleus_scale=1.0):
         self.name = name
-        self.nucleus = Nucleus(protons, neutrons)
+        self.nucleus = Nucleus(protons, neutrons, scale=nucleus_scale)
         self.color = color
         self.cx = cx
         self.cy = cy
@@ -234,16 +236,18 @@ class Atom:
             self.cy = -h + margin
             self.vy *= -1
 
-        # redraw nucleus and orbit
+        # redraw nucleus and orbits
         self.drawer.clear()
-        # draw orbit
-        self.drawer.penup()
-        self.drawer.goto(self.cx, self.cy - 100)
-        self.drawer.pendown()
-        self.drawer.color(self.color)
-        self.drawer.setheading(0)
-        self.drawer.circle(100)
-        self.drawer.penup()
+        # draw orbits for each unique electron radius
+        radii = sorted({e.r for e in self.electrons})
+        for r in radii:
+            self.drawer.penup()
+            self.drawer.goto(self.cx, self.cy - r)
+            self.drawer.pendown()
+            self.drawer.color(self.color)
+            self.drawer.setheading(0)
+            self.drawer.circle(r)
+            self.drawer.penup()
         # draw nucleus (uses drawer for nucleons)
         self.nucleus.draw(self.cx, self.cy, drawer=self.drawer)
         # label
@@ -274,30 +278,48 @@ if __name__ == "__main__":
     # Hydrogen example (1 proton, 0 neutrons) to the left
     hx, hy = cx - 250, cy
     hydrogen = Atom("Hydrogen", 1, 0, "lightblue", hx, hy)
-    hydrogen.add_electron(100, 45, 20.0, color='blue')
+    hydrogen.add_electron(100, 45, 20.0, color='cyan')
     hydrogen.start_random_motion(0.9)
     atoms.append(hydrogen)
 
     # Deuterium example (1 proton, 1 neutron)
     deuterium = Atom("Deuterium", 1, 1, "white", cx, cy)
-    deuterium.add_electron(100, 0, 20.0, color='blue')
+    deuterium.add_electron(100, 0, 20.0, color='cyan')
     deuterium.start_random_motion(0.9)
     atoms.append(deuterium)
 
     # Tritium example (1 proton, 2 neutrons) below center
     tx, ty = cx, cy - 250
     tritium = Atom("Tritium", 1, 2, "lightgreen", tx, ty)
-    tritium.add_electron(100, -45, 20.0, color='blue')
+    tritium.add_electron(100, -45, 20.0, color='cyan')
     tritium.start_random_motion(1.0)
     atoms.append(tritium)
     
     # Helium example (2 protons, 2 neutrons) to the right
     hx2, hy2 = cx + 250, cy
     helium = Atom("Helium", 2, 2, "yellow", hx2, hy2)
-    helium.add_electron(100, 90, 20.0, color='blue')
-    helium.add_electron(100, 270, 20.0, color='blue')
+    helium.add_electron(100, 90, 20.0, color='cyan')
+    helium.add_electron(100, 270, 20.0, color='cyan')
     helium.start_random_motion(1.3)
     atoms.append(helium)
+
+    # Ferrum (Iron) example with compact core and multiple electron shells
+    # Ferrum: Z=26, choose typical isotope around 56 nucleons
+    fx, fy = cx, cy + 250
+    ferrum = Atom("Ferrum", 26, 30, "orange", fx, fy, nucleus_scale=0.5)
+    # electron shells (approx): 2,8,14,2 -> distribute electrons evenly per shell
+    shells = [(140, 2), (180, 8), (220, 14), (260, 2)]
+    for r, count in shells:
+        for k in range(count):
+            angle = k * (360.0 / max(1, count))
+            # vary speed slightly per shell
+            speed = 500.0  # random.uniform(1.0, 3.0) * (1.0 + (r / 200.0))
+            ferrum.add_electron(r, angle, speed, color='cyan')
+    # give ferrum a slight drift so it moves and can collide
+    ferrum.start_random_motion(0.6)
+    atoms.append(ferrum)
+    
+    
 
     # collect animated electrons for frame updates
     animated = []
