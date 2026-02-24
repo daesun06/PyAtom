@@ -18,15 +18,16 @@ class Proton:
         self.color = "red"
         self.radius = 12
     
-    def draw(self, x=0, y=0):
-        t.penup()
-        t.goto(x, y - self.radius)
-        t.pendown()
-        t.color(self.color)
-        t.setheading(0)
-        t.begin_fill()
-        t.circle(self.radius)
-        t.end_fill()
+    def draw(self, x=0, y=0, drawer=None):
+        drawer = drawer or t
+        drawer.penup()
+        drawer.goto(x, y - self.radius)
+        drawer.pendown()
+        drawer.color(self.color)
+        drawer.setheading(0)
+        drawer.begin_fill()
+        drawer.circle(self.radius)
+        drawer.end_fill()
         
 class Neutron:
     def __init__(self):
@@ -35,15 +36,16 @@ class Neutron:
         self.color = "green"
         self.radius = 12
     
-    def draw(self, x=0, y=0):
-        t.penup()
-        t.goto(x, y - self.radius)
-        t.pendown()
-        t.color(self.color)
-        t.setheading(0)
-        t.begin_fill()
-        t.circle(self.radius)
-        t.end_fill()
+    def draw(self, x=0, y=0, drawer=None):
+        drawer = drawer or t
+        drawer.penup()
+        drawer.goto(x, y - self.radius)
+        drawer.pendown()
+        drawer.color(self.color)
+        drawer.setheading(0)
+        drawer.begin_fill()
+        drawer.circle(self.radius)
+        drawer.end_fill()
         
 class Electron:
     def __init__(self):
@@ -52,18 +54,19 @@ class Electron:
         self.color = "blue"
         self.radius = 5
     
-    def draw(self, distance, angle, cx=0, cy=0):
+    def draw(self, distance, angle, cx=0, cy=0, drawer=None):
         # static draw (kept for backwards compatibility)
+        drawer = drawer or t
         x = cx + distance * math.cos(math.radians(angle))
         y = cy + distance * math.sin(math.radians(angle))
-        t.penup()
-        t.goto(x, y - self.radius)
-        t.pendown()
-        t.color(self.color)
-        t.setheading(0)
-        t.begin_fill()
-        t.circle(self.radius)
-        t.end_fill()
+        drawer.penup()
+        drawer.goto(x, y - self.radius)
+        drawer.pendown()
+        drawer.color(self.color)
+        drawer.setheading(0)
+        drawer.begin_fill()
+        drawer.circle(self.radius)
+        drawer.end_fill()
 
     # Animation helper creates an independent turtle for animation
     def create_anim_turtle(self):
@@ -103,7 +106,8 @@ class Nucleus:
         self.nucleon_radius = Proton().radius
         self.color = "purple"
     
-    def draw(self, cx=0, cy=0):
+    def draw(self, cx=0, cy=0, drawer=None):
+        drawer = drawer or t
         total = self.protons + self.neutrons
 
         # Estimate nucleus radius based on number of nucleons
@@ -113,14 +117,14 @@ class Nucleus:
         nucleus_radius = max(self.nucleon_radius * 3.0, math.sqrt(max(1, total)) * self.nucleon_radius * factor)
 
         # Draw nucleus background (centered at cx,cy)
-        t.penup()
-        t.goto(cx, cy - nucleus_radius)
-        t.pendown()
-        t.color(self.color)
-        t.setheading(0)
-        t.begin_fill()
-        t.circle(nucleus_radius)
-        t.end_fill()
+        drawer.penup()
+        drawer.goto(cx, cy - nucleus_radius)
+        drawer.pendown()
+        drawer.color(self.color)
+        drawer.setheading(0)
+        drawer.begin_fill()
+        drawer.circle(nucleus_radius)
+        drawer.end_fill()
 
         # Place nucleons randomly inside nucleus without overlapping
         positions = []
@@ -151,7 +155,7 @@ class Nucleus:
             positions.append(placed)
             proton = Proton()
             # offset by nucleus center
-            proton.draw(cx + placed[0], cy + placed[1])
+            proton.draw(cx + placed[0], cy + placed[1], drawer=drawer)
 
         # place neutrons
         for i in range(self.neutrons):
@@ -166,24 +170,92 @@ class Nucleus:
             positions.append(placed)
             neutron = Neutron()
             # offset by nucleus center
-            neutron.draw(cx + placed[0], cy + placed[1])
+            neutron.draw(cx + placed[0], cy + placed[1], drawer=drawer)
+
+    def radius(self):
+        # same formula as in draw to compute nucleus radius
+        total = self.protons + self.neutrons
+        factor = 2.2
+        return max(self.nucleon_radius * 3.0, math.sqrt(max(1, total)) * self.nucleon_radius * factor)
+
+    def mass(self):
+        # approximate mass proportional to nucleon count
+        return max(1.0, float(self.protons + self.neutrons))
 
 class Atom:
-    def __init__(self, name, protons, neutrons, color):
+    def __init__(self, name, protons, neutrons, color, cx=0, cy=0):
         self.name = name
-        self.nucleus = Nucleus(protons, neutrons)  # Assuming equal number of neutrons for simplicity
+        self.nucleus = Nucleus(protons, neutrons)
         self.color = color
-    
-    def draw_nucleus(self, cx=0, cy=0):
-        self.nucleus.draw(cx, cy)
-    
-    def draw_orbit(self, radius, cx=0, cy=0):
-        t.penup()
-        t.goto(cx, cy - radius)
-        t.pendown()
-        t.color(self.color)
-        t.circle(radius)
-        t.setheading(0)
+        self.cx = cx
+        self.cy = cy
+        # per-atom drawing turtle so nucleus/orbit can be cleared/redrawn
+        self.drawer = turtle.Turtle()
+        self.drawer.hideturtle()
+        self.drawer.penup()
+        self.drawer.speed(0)
+        self.electrons = []
+        self.vx = 0.0
+        self.vy = 0.0
+
+    def add_electron(self, r, angle, speed, color=None):
+        e = Electron()
+        e.start_orbit(self.cx, self.cy, r, angle, speed, color=color)
+        self.electrons.append(e)
+        return e
+
+    def start_motion(self, vx, vy):
+        self.vx = vx
+        self.vy = vy
+
+    def start_random_motion(self, max_speed=1.0):
+        self.vx = random.uniform(-max_speed, max_speed)
+        self.vy = random.uniform(-max_speed, max_speed)
+
+    def update(self):
+        # move
+        self.cx += self.vx
+        self.cy += self.vy
+
+        # bounce within window bounds
+        w = screen.window_width() / 2
+        h = screen.window_height() / 2
+        margin = 60
+        if self.cx > w - margin:
+            self.cx = w - margin
+            self.vx *= -1
+        if self.cx < -w + margin:
+            self.cx = -w + margin
+            self.vx *= -1
+        if self.cy > h - margin:
+            self.cy = h - margin
+            self.vy *= -1
+        if self.cy < -h + margin:
+            self.cy = -h + margin
+            self.vy *= -1
+
+        # redraw nucleus and orbit
+        self.drawer.clear()
+        # draw orbit
+        self.drawer.penup()
+        self.drawer.goto(self.cx, self.cy - 100)
+        self.drawer.pendown()
+        self.drawer.color(self.color)
+        self.drawer.setheading(0)
+        self.drawer.circle(100)
+        self.drawer.penup()
+        # draw nucleus (uses drawer for nucleons)
+        self.nucleus.draw(self.cx, self.cy, drawer=self.drawer)
+        # label
+        self.drawer.penup()
+        self.drawer.goto(self.cx, self.cy - 120)
+        self.drawer.color('white')
+        self.drawer.write(self.name, align="center", font=("Arial", 12, "normal"))
+
+        # update electron orbit centers
+        for e in self.electrons:
+            e.orbit_cx = self.cx
+            e.orbit_cy = self.cy
         
 # Example usage
 if __name__ == "__main__":
@@ -197,75 +269,88 @@ if __name__ == "__main__":
     else:
         cx, cy = 0, 0
 
+    atoms = []
+
     # Hydrogen example (1 proton, 0 neutrons) to the left
     hx, hy = cx - 250, cy
-    hydrogen = Atom("Hydrogen", 1, 0, "lightblue")
-    hydrogen.draw_nucleus(hx, hy)
-    hydrogen.draw_orbit(100, hx, hy)
-    electron = Electron()
-    # animated electrons will be created later
-    t.penup()
-    t.goto(hx, hy - 120)
-    t.color("white")
-    t.write("Hydrogen", align="center", font=("Arial", 12, "normal"))
+    hydrogen = Atom("Hydrogen", 1, 0, "lightblue", hx, hy)
+    hydrogen.add_electron(100, 45, 20.0, color='blue')
+    hydrogen.start_random_motion(0.9)
+    atoms.append(hydrogen)
 
     # Deuterium example (1 proton, 1 neutron)
-    deuterium = Atom("Deuterium", 1, 1, "white")
-    deuterium.draw_nucleus(cx, cy)
-    deuterium.draw_orbit(100, cx, cy)
-    t.penup()
-    t.goto(cx, cy - 120)
-    t.color("white")
-    t.write("Deuterium", align="center", font=("Arial", 12, "normal"))
-
+    deuterium = Atom("Deuterium", 1, 1, "white", cx, cy)
+    deuterium.add_electron(100, 0, 20.0, color='blue')
+    deuterium.start_random_motion(0.9)
+    atoms.append(deuterium)
 
     # Tritium example (1 proton, 2 neutrons) below center
     tx, ty = cx, cy - 250
-    tritium = Atom("Tritium", 1, 2, "lightgreen")
-    tritium.draw_nucleus(tx, ty)
-    tritium.draw_orbit(100, tx, ty)
-    t.penup()
-    t.goto(tx, ty - 120)
-    t.color("white")
-    t.write("Tritium", align="center", font=("Arial", 12, "normal"))
+    tritium = Atom("Tritium", 1, 2, "lightgreen", tx, ty)
+    tritium.add_electron(100, -45, 20.0, color='blue')
+    tritium.start_random_motion(1.0)
+    atoms.append(tritium)
     
     # Helium example (2 protons, 2 neutrons) to the right
     hx2, hy2 = cx + 250, cy
-    helium = Atom("Helium", 2, 2, "yellow")
-    helium.draw_nucleus(hx2, hy2)
-    helium.draw_orbit(100, hx2, hy2)
-    t.penup()
-    t.goto(hx2, hy2 - 120)
-    t.color("white")
-    t.write("Helium", align="center", font=("Arial", 12, "normal"))
-    
-    # --- Animated electrons setup using Electron class methods ---
+    helium = Atom("Helium", 2, 2, "yellow", hx2, hy2)
+    helium.add_electron(100, 90, 20.0, color='blue')
+    helium.add_electron(100, 270, 20.0, color='blue')
+    helium.start_random_motion(1.3)
+    atoms.append(helium)
+
+    # collect animated electrons for frame updates
     animated = []
-
-    # Hydrogen electron
-    e_h = Electron()
-    e_h.start_orbit(hx, hy, 100, 45, 2.2, color='blue')
-    animated.append(e_h)
-
-    # Deuterium electron
-    e_d = Electron()
-    e_d.start_orbit(cx, cy, 100, 0, 2.0, color='blue')
-    animated.append(e_d)
-
-    # Tritium electron
-    e_t = Electron()
-    e_t.start_orbit(tx, ty, 100, -45, 1.8, color='blue')
-    animated.append(e_t)
-
-    # Helium electrons (two, opposite)
-    e_he1 = Electron()
-    e_he1.start_orbit(hx2, hy2, 100, 90, 2.5, color='blue')
-    animated.append(e_he1)
-    e_he2 = Electron()
-    e_he2.start_orbit(hx2, hy2, 100, 270, 2.5, color='blue')
-    animated.append(e_he2)
+    for a in atoms:
+        for e in a.electrons:
+            animated.append(e)
 
     def animate():
+        for a in atoms:
+            a.update()
+
+        # detect and resolve nucleus collisions between atoms
+        for i in range(len(atoms)):
+            for j in range(i + 1, len(atoms)):
+                a = atoms[i]
+                b = atoms[j]
+                dx = a.cx - b.cx
+                dy = a.cy - b.cy
+                dist = math.hypot(dx, dy)
+                r1 = a.nucleus.radius()
+                r2 = b.nucleus.radius()
+                if dist <= 0:
+                    # jitter a tiny bit to avoid divide by zero
+                    dx = random.uniform(-0.5, 0.5)
+                    dy = random.uniform(-0.5, 0.5)
+                    dist = math.hypot(dx, dy)
+                if dist < (r1 + r2):
+                    # normalized collision axis
+                    nx = dx / dist
+                    ny = dy / dist
+                    # relative velocity along normal
+                    rvx = a.vx - b.vx
+                    rvy = a.vy - b.vy
+                    vel_along = rvx * nx + rvy * ny
+                    # only resolve if moving towards each other (or overlapping)
+                    m1 = a.nucleus.mass()
+                    m2 = b.nucleus.mass()
+                    e = 1.0
+                    # compute impulse scalar
+                    j = -(1 + e) * vel_along / (1.0 / m1 + 1.0 / m2)
+                    # apply impulse
+                    a.vx += (j * nx) / m1
+                    a.vy += (j * ny) / m1
+                    b.vx -= (j * nx) / m2
+                    b.vy -= (j * ny) / m2
+                    # separate overlapping atoms proportionally to mass
+                    overlap = (r1 + r2) - dist
+                    if overlap > 0:
+                        a.cx += nx * (overlap * (m2 / (m1 + m2)))
+                        a.cy += ny * (overlap * (m2 / (m1 + m2)))
+                        b.cx -= nx * (overlap * (m1 / (m1 + m2)))
+                        b.cy -= ny * (overlap * (m1 / (m1 + m2)))
+
         for e in animated:
             e.update()
         screen.update()
